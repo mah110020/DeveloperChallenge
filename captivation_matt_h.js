@@ -1,8 +1,10 @@
 const { Transform } = require("stream");
 
-let bitCount = 0, partialByteSum = 0;
+let bitCount = 0
+const partialByteSums = [0, 0, 0, 0, 0, 0, 0, 0]; // capture every possible alignment
+const charSeq = ["", "", "", "", "", "", "", ""]; // only tracks previous preamble.length characters; capture every alignment
 const preamble = "CAPTIVATION";
-let seq = ""; // track previous preamble.length characters
+let preambleAlignment = 0; // bit alignment of preamble
 let numPrint = 0; // print the next numPrint characters
 
 const trans = new Transform({
@@ -13,18 +15,24 @@ const trans = new Transform({
 
 		for( const bit of bits ){
 			bitCount += 1;
-			partialByteSum = (partialByteSum << 1) | bit;
 
-			if( bitCount % 8 === 0 ){
-				const digit = String.fromCharCode(partialByteSum);
-				partialByteSum = 0;
+			for( const index in partialByteSums ){
+				partialByteSums[index] = (partialByteSums[index] << 1) | bit;
+			}
 
-				if( numPrint > 0 ){
-					this.push(digit);
-				}
+			const bytePopIndex = bitCount % 8;
+			const digit = String.fromCharCode(partialByteSums[bytePopIndex]);
+			partialByteSums[bytePopIndex] = 0;
 
-				seq = (seq + digit).substr(-preamble.length);
-				numPrint = seq === preamble ? 100 : numPrint - 1;
+			if( numPrint > 0 && bytePopIndex === preambleAlignment ){
+				this.push(digit);
+				numPrint -= 1;
+			}
+
+			charSeq[bytePopIndex] = (charSeq[bytePopIndex] + digit).substr(-preamble.length);
+			if( charSeq[bytePopIndex] === preamble ){
+				numPrint = 100;
+				preambleAlignment = bytePopIndex;
 			}
 		}
 
